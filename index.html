@@ -67,6 +67,29 @@
     .option:hover { background: #eff6ff; }
     .option input { margin-top: 4px; }
 
+
+    .source-box {
+      margin: 18px 0 22px;
+      padding: 18px 20px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-left: 4px solid #2563eb;
+      border-radius: 10px;
+    }
+    .source-heading {
+      margin: 0 0 10px;
+      color: #1e40af;
+      font-weight: bold;
+    }
+    .source-text {
+      margin: 0;
+      color: #334155;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 16px;
+    }
+
     .statement {
       border-bottom: 1px solid #e2e8f0;
       padding: 15px 0;
@@ -293,9 +316,24 @@
           area.appendChild(label);
         });
       } else {
+        if (q.source) {
+          const sourceBox = document.createElement("section");
+          sourceBox.className = "source-box";
+          const sourceHeading = document.createElement("p");
+          sourceHeading.className = "source-heading";
+          sourceHeading.textContent = "Tư liệu";
+          const sourceText = document.createElement("p");
+          sourceText.className = "source-text";
+          sourceText.textContent = q.source;
+          sourceBox.append(sourceHeading, sourceText);
+          area.appendChild(sourceBox);
+        }
+
         const intro = document.createElement("p");
         intro.className = "muted";
-        intro.textContent = "Đọc từng nhận định và chọn một ô Đúng hoặc Sai.";
+        intro.textContent = q.source
+          ? "Đọc đoạn tư liệu, sau đó đánh giá từng nhận định và chọn Đúng hoặc Sai."
+          : "Đọc từng nhận định và chọn một ô Đúng hoặc Sai.";
         area.appendChild(intro);
 
         const wrap = document.createElement("div");
