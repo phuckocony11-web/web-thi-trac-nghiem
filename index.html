@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Thi Trắc Nghiệm</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+    }
+
+    header {
+      background: #2563eb;
+      color: white;
+      padding: 22px 5%;
+    }
+
+    header h1 { margin: 0 0 8px; }
+    header p { margin: 0; opacity: .9; }
+
+    .container {
+      max-width: 1050px;
+      margin: 28px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 1fr 240px;
+      gap: 20px;
+    }
+
+    .card {
+      background: white;
+      padding: 24px;
+      border-radius: 14px;
+      box-shadow: 0 3px 12px #0000000a;
+    }
+
+    .tag {
+      display: inline-block;
+      background: #dbeafe;
+      color: #1d4ed8;
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    h2 { font-size: 21px; line-height: 1.5; }
+
+    .option {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      border: 1px solid #dbe3ee;
+      padding: 14px;
+      border-radius: 10px;
+      margin: 10px 0;
+      cursor: pointer;
+      line-height: 1.5;
+    }
+
+    .option:hover { background: #eff6ff; }
+    .option input { margin-top: 4px; }
+
+    .statement {
+      border-bottom: 1px solid #e2e8f0;
+      padding: 15px 0;
+    }
+
+    .statement p { line-height: 1.6; margin-top: 0; }
+
+    select {
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 15px;
+      background: white;
+    }
+
+    button {
+      padding: 11px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    button:disabled { opacity: .4; cursor: not-allowed; }
+
+    .primary { background: #2563eb; color: white; }
+    .secondary { background: #e2e8f0; color: #1e293b; }
+    .submit { background: #16a34a; color: white; width: 100%; }
+
+    .nav-buttons {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .question-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 16px 0;
+    }
+
+    .q-number {
+      background: #e2e8f0;
+      color: #334155;
+      padding: 10px 0;
+    }
+
+    .q-number.active { background: #2563eb; color: white; }
+    .q-number.done:not(.active) { background: #bbf7d0; }
+
+    .muted { color: #64748b; font-size: 14px; line-height: 1.6; }
+    #result { margin-top: 20px; line-height: 1.8; }
+
+    @media (max-width: 700px) {
+      .container { grid-template-columns: 1fr; }
+      header { padding: 20px; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>🎓 Web Thi Trắc Nghiệm</h1>
+    <p>Luyện tập kiến thức · Chọn đáp án · Kiểm tra kết quả</p>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div id="question-area"></div>
+
+      <div class="nav-buttons">
+        <button class="secondary" id="prev">← Câu trước</button>
+        <button class="primary" id="next">Câu tiếp →</button>
+      </div>
+
+      <div id="result" hidden></div>
+    </section>
+
+    <aside class="card">
+      <h3>Bài làm của bạn</h3>
+      <p class="muted" id="progress">Đã làm 0/2 câu</p>
+
+      <div class="question-grid" id="question-grid"></div>
+
+      <p class="muted">
+        <span style="color:#16a34a">■</span> Đã trả lời<br>
+        <span style="color:#2563eb">■</span> Câu đang xem<br>
+        <span style="color:#94a3b8">■</span> Chưa trả lời
+      </p>
+
+      <button class="submit" id="submit">Nộp bài</button>
+      <p class="muted">Đây là đề mẫu để thử giao diện.</p>
+    </aside>
+  </main>
+
+  <script>
+    // Dữ liệu mẫu: có thể thay bằng đề thi của bạn.
+
+let questions = [];
+let current = 0;
+let submitted = false;
+let answers = [];
+
+async function loadQuestions() {
+  const area = document.getElementById("question-area");
+
+  try {
+    const response = await fetch("./questions.json");
+
+    if (!response.ok) {
+      throw new Error("Không tìm thấy questions.json");
+    }
+
+    const data = await response.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error("File đề chưa có câu hỏi hợp lệ");
+    }
+
+    questions = data;
+    answers = questions.map(q =>
+      q.type === "mcq"
+        ? null
+        : Array(q.answer.length).fill(null)
+    );
+
+    render();
+  } catch (error) {
+    area.textContent =
+      "Không tải được đề thi: " + error.message +
+      ". Hãy kiểm tra file questions.json và chạy bằng Live Server.";
+  }
+}
+
+    const area = document.getElementById("question-area");
+    const grid = document.getElementById("question-grid");
+    const progress = document.getElementById("progress");
+    const result = document.getElementById("result");
+
+    function isAnswered(i) {
+      if (questions[i].type === "mcq") {
+        return answers[i] !== null;
+      }
+      return answers[i].some(v => v !== null);
+    }
+
+    function render() {
+      const q = questions[current];
+
+      area.innerHTML = `
+        <span class="tag">
+          ${q.type === "mcq" ? "TRẮC NGHIỆM A/B/C/D" : "TRẮC NGHIỆM ĐÚNG / SAI"}
+        </span>
+        <p class="muted">Câu ${current + 1} / ${questions.length}</p>
+        <h2>${q.title}</h2>
+      `;
+
+      if (q.type === "mcq") {
+        q.options.forEach((option, i) => {
+          const label = document.createElement("label");
+          label.className = "option";
+
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "mcq";
+          radio.checked = answers[current] === i;
+          radio.disabled = submitted;
+
+          radio.addEventListener("change", () => {
+            answers[current] = i;
+            render();
+          });
+
+          label.append(radio, document.createTextNode(option));
+          area.appendChild(label);
+        });
+      } else {
+        q.statements.forEach((statement, i) => {
+          const row = document.createElement("div");
+          row.className = "statement";
+
+          const p = document.createElement("p");
+          p.textContent = String.fromCharCode(97 + i) + ") " + statement;
+
+          const select = document.createElement("select");
+          select.disabled = submitted;
+          select.innerHTML = `
+            <option value="">-- Chọn đáp án --</option>
+            <option value="true">Đúng</option>
+            <option value="false">Sai</option>
+          `;
+
+          if (answers[current][i] !== null) {
+            select.value = String(answers[current][i]);
+          }
+
+          select.addEventListener("change", () => {
+            answers[current][i] =
+              select.value === "" ? null : select.value === "true";
+            updateGrid();
+          });
+
+          row.append(p, select);
+          area.appendChild(row);
+        });
+      }
+
+      document.getElementById("prev").disabled = current === 0;
+      document.getElementById("next").disabled =
+        current === questions.length - 1 || submitted;
+
+      updateGrid();
+    }
+
+    function updateGrid() {
+      grid.innerHTML = "";
+
+      questions.forEach((q, i) => {
+        const button = document.createElement("button");
+        button.className = "q-number";
+        button.textContent = i + 1;
+
+        if (i === current) button.classList.add("active");
+        if (isAnswered(i)) button.classList.add("done");
+
+        button.addEventListener("click", () => {
+          current = i;
+          render();
+        });
+
+        grid.appendChild(button);
+      });
+
+      const count = questions.filter((q, i) => isAnswered(i)).length;
+      progress.textContent = `Đã làm ${count}/${questions.length} câu`;
+    }
+
+    document.getElementById("prev").addEventListener("click", () => {
+      if (current > 0) {
+        current--;
+        render();
+      }
+    });
+
+    document.getElementById("next").addEventListener("click", () => {
+      if (current < questions.length - 1) {
+        current++;
+        render();
+      }
+    });
+
+    document.getElementById("submit").addEventListener("click", () => {
+      if (submitted) return;
+
+      if (!confirm("Bạn có chắc muốn nộp bài không?")) return;
+
+      let score = 0;
+      let maxScore = 0;
+
+      questions.forEach((q, i) => {
+        if (q.type === "mcq") {
+          maxScore += 1;
+          if (answers[i] === q.answer) score += 1;
+        } else {
+          maxScore += q.answer.length;
+          q.answer.forEach((correct, j) => {
+            if (answers[i][j] === correct) score += 1;
+          });
+        }
+      });
+
+      submitted = true;
+      render();
+
+      result.hidden = false;
+      result.innerHTML = `
+        <hr>
+        <h2>🎉 Đã nộp bài!</h2>
+        <p>Số ý/câu đúng: <strong>${score}/${maxScore}</strong></p>
+        <p>Điểm quy đổi thang 10:
+          <strong>${(score / maxScore * 10).toFixed(2)}</strong>
+        </p>
+        <p class="muted">
+          Bài mẫu đang tính 1 điểm cho mỗi câu A/B/C/D
+          và 1 điểm cho mỗi ý Đúng/Sai.
+        </p>
+      `;
+
+      document.getElementById("submit").disabled = true;
+      result.scrollIntoView({ behavior: "smooth" });
+    });
+
+    loadQuestions();
+  </script>
+</body>
+</html>
