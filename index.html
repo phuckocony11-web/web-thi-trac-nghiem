@@ -123,6 +123,22 @@
     .muted { color: #64748b; font-size: 14px; line-height: 1.6; }
     #result { margin-top: 20px; line-height: 1.8; }
 
+
+    .tf-table-wrap { overflow-x: auto; margin-top: 18px; }
+    .tf-table { width: 100%; border-collapse: collapse; min-width: 420px; }
+    .tf-table th, .tf-table td { border: 1px solid #dbe3ee; padding: 12px; }
+    .tf-table thead th { background: #eff6ff; color: #1e40af; text-align: center; }
+    .tf-table th:first-child, .tf-table td:first-child { text-align: left; }
+    .tf-table td.choice { width: 76px; text-align: center; }
+    .tf-table input[type="radio"] { width: 18px; height: 18px; cursor: pointer; accent-color: #2563eb; }
+    .tf-table tr:last-child td { border-bottom: 1px solid #dbe3ee; }
+    .round-info { margin: 12px 0; padding: 12px 14px; background: #eff6ff; border-radius: 10px; color: #1e40af; line-height: 1.5; }
+    .review-item { padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+    .correct-text { color: #15803d; font-weight: bold; }
+    .wrong-text { color: #dc2626; font-weight: bold; }
+    .retry-button { background: #7c3aed; color: white; margin-top: 12px; }
+    .tf-table tr:hover { background: #f8fafc; }
+
     @media (max-width: 700px) {
       .container { grid-template-columns: 1fr; }
       header { padding: 20px; }
@@ -161,71 +177,102 @@
       </p>
 
       <button class="submit" id="submit">Nộp bài</button>
-      <p class="muted">Đây là đề mẫu để thử giao diện.</p>
+      <p class="muted">Sau khi nộp bài, ông có thể luyện lại câu/ý sai tối đa 3 lần.</p>
     </aside>
   </main>
 
   <script>
-    // Dữ liệu mẫu: có thể thay bằng đề thi của bạn.
+    let questions = [];
+    let current = 0;
+    let submitted = false;
+    let answers = [];
+    let round = 1;
 
-let questions = [];
-let current = 0;
-let submitted = false;
-let answers = [];
-
-async function loadQuestions() {
-  const area = document.getElementById("question-area");
-
-  try {
-    const response = await fetch("./questions.json");
-
-    if (!response.ok) {
-      throw new Error("Không tìm thấy questions.json");
-    }
-
-    const data = await response.json();
-
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error("File đề chưa có câu hỏi hợp lệ");
-    }
-
-    questions = data;
-    answers = questions.map(q =>
-      q.type === "mcq"
-        ? null
-        : Array(q.answer.length).fill(null)
-    );
-
-    render();
-  } catch (error) {
-    area.textContent =
-      "Không tải được đề thi: " + error.message +
-      ". Hãy kiểm tra file questions.json và chạy bằng Live Server.";
-  }
-}
+    // Mỗi phần tử là một câu MCQ hoặc một nhóm nhận định Đúng/Sai.
+    // Ở lượt 2 và 3, nhóm Đúng/Sai chỉ chứa những nhận định còn sai.
+    let roundItems = [];
+    let lastMisses = [];
 
     const area = document.getElementById("question-area");
     const grid = document.getElementById("question-grid");
     const progress = document.getElementById("progress");
     const result = document.getElementById("result");
 
-    function isAnswered(i) {
-      if (questions[i].type === "mcq") {
-        return answers[i] !== null;
+    async function loadQuestions() {
+      try {
+        const response = await fetch("./questions.json");
+        if (!response.ok) throw new Error("Không tìm thấy questions.json");
+
+        const data = await response.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          throw new Error("File đề chưa có câu hỏi hợp lệ");
+        }
+
+        questions = data;
+        roundItems = questions.map((q, qi) => ({
+          qi,
+          statements: q.type === "tf" ? q.statements.map((_, si) => si) : null
+        }));
+        resetAnswers();
+        render();
+      } catch (error) {
+        area.textContent = "Không tải được đề thi: " + error.message +
+          ". Hãy kiểm tra file questions.json và chạy bằng Live Server.";
       }
-      return answers[i].some(v => v !== null);
+    }
+
+    function resetAnswers() {
+      answers = questions.map(q =>
+        q.type === "mcq" ? null : Array(q.answer.length).fill(null)
+      );
+      current = 0;
+      submitted = false;
+      result.hidden = true;
+      result.innerHTML = "";
+      document.getElementById("submit").disabled = false;
+    }
+
+    function getCurrentItem() {
+      return roundItems[current];
+    }
+
+    function isAnswered(item) {
+      const q = questions[item.qi];
+      if (q.type === "mcq") return answers[item.qi] !== null;
+      return item.statements.every(si => answers[item.qi][si] !== null);
     }
 
     function render() {
-      const q = questions[current];
+      if (!roundItems.length) {
+        area.textContent = "Không còn câu hỏi cần làm. Chúc mừng ông!";
+        return;
+      }
 
-      area.innerHTML = `
-        <span class="tag">
-          ${q.type === "mcq" ? "TRẮC NGHIỆM A/B/C/D" : "TRẮC NGHIỆM ĐÚNG / SAI"}
-        </span>
-        <p class="muted">Câu ${current + 1} / ${questions.length}</p>
-        <h2>${q.title}</h2>
-      `;
+      const item = getCurrentItem();
+      const q = questions[item.qi];
+      area.innerHTML = "";
+
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = q.type === "mcq"
+        ? "TRẮC NGHIỆM A/B/C/D"
+        : "TRẮC NGHIỆM ĐÚNG / SAI";
+
+      const roundInfo = document.createElement("div");
+      roundInfo.className = "round-info";
+      roundInfo.textContent = round === 1
+        ? "Lần 1 · Làm toàn bộ đề"
+        : `Lần ${round} · Chỉ luyện lại những câu/ý còn sai ở lần trước`;
+
+      const count = document.createElement("p");
+      count.className = "muted";
+      count.textContent = `Câu ${current + 1} / ${roundItems.length}` +
+        (q.topic ? ` · ${q.topic}` : "");
+
+      const title = document.createElement("h2");
+      title.textContent = q.title;
+
+      area.append(tag, roundInfo, count, title);
 
       if (q.type === "mcq") {
         q.options.forEach((option, i) => {
@@ -235,87 +282,214 @@ async function loadQuestions() {
           const radio = document.createElement("input");
           radio.type = "radio";
           radio.name = "mcq";
-          radio.checked = answers[current] === i;
+          radio.checked = answers[item.qi] === i;
           radio.disabled = submitted;
-
           radio.addEventListener("change", () => {
-            answers[current] = i;
-            render();
+            answers[item.qi] = i;
+            updateGrid();
           });
 
           label.append(radio, document.createTextNode(option));
           area.appendChild(label);
         });
       } else {
-        q.statements.forEach((statement, i) => {
-          const row = document.createElement("div");
-          row.className = "statement";
+        const intro = document.createElement("p");
+        intro.className = "muted";
+        intro.textContent = "Đọc từng nhận định và chọn một ô Đúng hoặc Sai.";
+        area.appendChild(intro);
 
-          const p = document.createElement("p");
-          p.textContent = String.fromCharCode(97 + i) + ") " + statement;
+        const wrap = document.createElement("div");
+        wrap.className = "tf-table-wrap";
 
-          const select = document.createElement("select");
-          select.disabled = submitted;
-          select.innerHTML = `
-            <option value="">-- Chọn đáp án --</option>
-            <option value="true">Đúng</option>
-            <option value="false">Sai</option>
-          `;
+        const table = document.createElement("table");
+        table.className = "tf-table";
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Nhận định</th>
+              <th>Đúng</th>
+              <th>Sai</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+        const tbody = table.querySelector("tbody");
 
-          if (answers[current][i] !== null) {
-            select.value = String(answers[current][i]);
-          }
+        item.statements.forEach(si => {
+          const tr = document.createElement("tr");
+          const statementCell = document.createElement("td");
+          statementCell.textContent =
+            String.fromCharCode(97 + si) + ") " + q.statements[si];
 
-          select.addEventListener("change", () => {
-            answers[current][i] =
-              select.value === "" ? null : select.value === "true";
+          const trueCell = document.createElement("td");
+          trueCell.className = "choice";
+          const falseCell = document.createElement("td");
+          falseCell.className = "choice";
+
+          const trueRadio = document.createElement("input");
+          trueRadio.type = "radio";
+          trueRadio.name = `tf-${item.qi}-${si}`;
+          trueRadio.setAttribute("aria-label", "Đúng");
+          trueRadio.checked = answers[item.qi][si] === true;
+          trueRadio.disabled = submitted;
+          trueRadio.addEventListener("change", () => {
+            answers[item.qi][si] = true;
             updateGrid();
           });
 
-          row.append(p, select);
-          area.appendChild(row);
+          const falseRadio = document.createElement("input");
+          falseRadio.type = "radio";
+          falseRadio.name = `tf-${item.qi}-${si}`;
+          falseRadio.setAttribute("aria-label", "Sai");
+          falseRadio.checked = answers[item.qi][si] === false;
+          falseRadio.disabled = submitted;
+          falseRadio.addEventListener("change", () => {
+            answers[item.qi][si] = false;
+            updateGrid();
+          });
+
+          trueCell.appendChild(trueRadio);
+          falseCell.appendChild(falseRadio);
+          tr.append(statementCell, trueCell, falseCell);
+          tbody.appendChild(tr);
         });
+
+        wrap.appendChild(table);
+        area.appendChild(wrap);
       }
 
       document.getElementById("prev").disabled = current === 0;
       document.getElementById("next").disabled =
-        current === questions.length - 1 || submitted;
-
+        current === roundItems.length - 1 || submitted;
       updateGrid();
     }
 
     function updateGrid() {
       grid.innerHTML = "";
-
-      questions.forEach((q, i) => {
+      roundItems.forEach((item, i) => {
         const button = document.createElement("button");
         button.className = "q-number";
         button.textContent = i + 1;
-
         if (i === current) button.classList.add("active");
-        if (isAnswered(i)) button.classList.add("done");
+        if (isAnswered(item)) button.classList.add("done");
 
         button.addEventListener("click", () => {
           current = i;
           render();
         });
-
         grid.appendChild(button);
       });
 
-      const count = questions.filter((q, i) => isAnswered(i)).length;
-      progress.textContent = `Đã làm ${count}/${questions.length} câu`;
+      const count = roundItems.filter(isAnswered).length;
+      progress.textContent = `Đã làm ${count}/${roundItems.length} câu`;
+    }
+
+    function gradeRound() {
+      let score = 0;
+      let maxScore = 0;
+      const misses = [];
+
+      roundItems.forEach(item => {
+        const q = questions[item.qi];
+        if (q.type === "mcq") {
+          maxScore++;
+          if (answers[item.qi] === q.answer) score++;
+          else misses.push({ qi: item.qi, si: null });
+        } else {
+          item.statements.forEach(si => {
+            maxScore++;
+            if (answers[item.qi][si] === q.answer[si]) score++;
+            else misses.push({ qi: item.qi, si });
+          });
+        }
+      });
+
+      return { score, maxScore, misses };
+    }
+
+    function showResults(grade) {
+      result.hidden = false;
+      result.innerHTML = "";
+
+      const heading = document.createElement("h2");
+      heading.textContent = `🎉 Kết quả lần ${round}`;
+      const scoreLine = document.createElement("p");
+      scoreLine.innerHTML = `Số ý/câu đúng: <strong>${grade.score}/${grade.maxScore}</strong>`;
+      const percentLine = document.createElement("p");
+      percentLine.innerHTML = `Điểm quy đổi thang 10: <strong>${(grade.score / grade.maxScore * 10).toFixed(2)}</strong>`;
+      result.append(heading, scoreLine, percentLine);
+
+      const reviewTitle = document.createElement("h3");
+      reviewTitle.textContent = grade.misses.length
+        ? "Những câu/ý cần xem lại"
+        : "Xuất sắc! Ông đã đúng tất cả.";
+      result.appendChild(reviewTitle);
+
+      if (grade.misses.length) {
+        grade.misses.forEach(miss => {
+          const q = questions[miss.qi];
+          const line = document.createElement("div");
+          line.className = "review-item";
+
+          if (miss.si === null) {
+            const correct = q.options[q.answer];
+            line.textContent = `Câu ${q.number ?? miss.qi + 1}: ${q.title} · Đáp án đúng: ${correct}`;
+          } else {
+            const correct = q.answer[miss.si] ? "Đúng" : "Sai";
+            line.textContent = `Câu ${q.number ?? miss.qi + 1}, ý ${String.fromCharCode(97 + miss.si)}: Đáp án đúng là ${correct}.`;
+          }
+          result.appendChild(line);
+        });
+      }
+
+      if (grade.misses.length && round < 3) {
+        const retry = document.createElement("button");
+        retry.className = "retry-button";
+        retry.textContent = `Làm lại ${grade.misses.length} câu/ý sai (lần ${round + 1})`;
+        retry.addEventListener("click", startNextRound);
+        result.appendChild(retry);
+      } else if (grade.misses.length && round === 3) {
+        const note = document.createElement("p");
+        note.className = "muted";
+        note.textContent = "Đã hoàn thành 3 lần. Ông có thể xem lại đáp án đúng ở phía trên.";
+        result.appendChild(note);
+      } else {
+        const note = document.createElement("p");
+        note.className = "correct-text";
+        note.textContent = "Không còn câu sai để luyện lại!";
+        result.appendChild(note);
+      }
+
+      result.scrollIntoView({ behavior: "smooth" });
+    }
+
+    function startNextRound() {
+      const grouped = new Map();
+      lastMisses.forEach(({ qi, si }) => {
+        if (!grouped.has(qi)) grouped.set(qi, []);
+        if (si !== null) grouped.get(qi).push(si);
+      });
+
+      roundItems = Array.from(grouped.entries()).map(([qi, statementIndexes]) => ({
+        qi,
+        statements: questions[qi].type === "tf" ? statementIndexes : null
+      }));
+
+      round++;
+      resetAnswers();
+      render();
+      area.scrollIntoView({ behavior: "smooth" });
     }
 
     document.getElementById("prev").addEventListener("click", () => {
-      if (current > 0) {
+      if (current > 0 && !submitted) {
         current--;
         render();
       }
     });
 
     document.getElementById("next").addEventListener("click", () => {
-      if (current < questions.length - 1) {
+      if (current < roundItems.length - 1 && !submitted) {
         current++;
         render();
       }
@@ -323,43 +497,14 @@ async function loadQuestions() {
 
     document.getElementById("submit").addEventListener("click", () => {
       if (submitted) return;
-
       if (!confirm("Bạn có chắc muốn nộp bài không?")) return;
 
-      let score = 0;
-      let maxScore = 0;
-
-      questions.forEach((q, i) => {
-        if (q.type === "mcq") {
-          maxScore += 1;
-          if (answers[i] === q.answer) score += 1;
-        } else {
-          maxScore += q.answer.length;
-          q.answer.forEach((correct, j) => {
-            if (answers[i][j] === correct) score += 1;
-          });
-        }
-      });
-
+      const grade = gradeRound();
+      lastMisses = grade.misses;
       submitted = true;
       render();
-
-      result.hidden = false;
-      result.innerHTML = `
-        <hr>
-        <h2>🎉 Đã nộp bài!</h2>
-        <p>Số ý/câu đúng: <strong>${score}/${maxScore}</strong></p>
-        <p>Điểm quy đổi thang 10:
-          <strong>${(score / maxScore * 10).toFixed(2)}</strong>
-        </p>
-        <p class="muted">
-          Bài mẫu đang tính 1 điểm cho mỗi câu A/B/C/D
-          và 1 điểm cho mỗi ý Đúng/Sai.
-        </p>
-      `;
-
+      showResults(grade);
       document.getElementById("submit").disabled = true;
-      result.scrollIntoView({ behavior: "smooth" });
     });
 
     loadQuestions();
